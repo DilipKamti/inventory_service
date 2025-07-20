@@ -3,7 +3,12 @@ pipeline {
 
     environment {
         IMAGE_NAME = "dilipkamti/inventory_service"
-        IMAGE_TAG = "latest"
+        DOCKER_TAG_PREFIX = "v"
+    }
+
+    parameters {
+        choice(name: 'PROFILE', choices: ['dev', 'prod'], description: 'Choose Spring Boot profile')
+        booleanParam(name: 'DELETE_OLD_BUILDS', defaultValue: false, description: 'Delete old Docker containers/images before building?')
     }
 
     stages {
@@ -13,13 +18,57 @@ pipeline {
             }
         }
 
-        stage('Build') {
+        stage('Determine Docker Image Version') {
+            steps {
+                script {
+                    def versionFile = '.docker-version'
+                    def currentVersion = '0.0'
+                    if (fileExists(versionFile)) {
+                        currentVersion = readFile(versionFile).trim()
+                    }
+                    def (major, minor) = currentVersion.tokenize('.').collect { it.toInteger() }
+                    def newVersion = "${major}.${minor + 1}"
+                    def versionTag = "${DOCKER_TAG_PREFIX}${newVersion}"
+                    env.DOCKER_VERSION = versionTag
+                    writeFile file: versionFile, text: newVersion
+                }
+            }
+        }
+
+        stage('Clean Old Docker Resources') {
+            when {
+                expression { params.DELETE_OLD_BUILDS }
+            }
             steps {
                 script {
                     if (isUnix()) {
-                        sh 'mvn clean package -DskipTests'
+                        sh '''
+                            docker ps -a --filter "ancestor=dilipkamti/inventory_service" --format "{{.ID}}" | xargs -r docker stop || true
+                            docker ps -a --filter "ancestor=dilipkamti/inventory_service" --format "{{.ID}}" | xargs -r docker rm || true
+                            docker images dilipkamti/inventory_service --format "{{.Repository}}:{{.Tag}}" | grep -v ${DOCKER_VERSION} | xargs -r docker rmi -f || true
+                        '''
                     } else {
-                        bat 'mvn clean package -DskipTests'
+                        bat """
+                        for /f "delims=" %%i in ('docker ps -a --filter "ancestor=dilipkamti/inventory_service" --format "{{.ID}}"') do (
+                            docker stop %%i
+                            docker rm %%i
+                        )
+
+                        powershell -Command "docker images dilipkamti/inventory_service --format '{{.Repository}}:{{.Tag}}' | Where-Object { \$_ -ne '${IMAGE_NAME}:${DOCKER_VERSION}' } | ForEach-Object { docker rmi -f \$_ }"
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Build Maven Project') {
+            steps {
+                script {
+                    def mvnCmd = "mvn clean package -DskipTests -Dspring.profiles.active=${params.PROFILE}"
+                    if (isUnix()) {
+                        sh mvnCmd
+                    } else {
+                        bat mvnCmd
                     }
                 }
             }
@@ -28,7 +77,8 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    def buildCmd = "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+                    def versionTag = "${IMAGE_NAME}:${DOCKER_VERSION}"
+                    def buildCmd = "docker build -t ${versionTag} ."
                     if (isUnix()) {
                         sh buildCmd
                     } else {
@@ -40,17 +90,16 @@ pipeline {
 
         stage('Login to Docker Hub') {
             steps {
-                script {
-                    withCredentials([usernamePassword(
-                        credentialsId: 'dockerhub-creds',
-                        usernameVariable: 'DOCKER_USERNAME',
-                        passwordVariable: 'DOCKER_PASSWORD'
-                    )]) {
-                        def loginCmd = "echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin"
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-creds',
+                    usernameVariable: 'DOCKER_USERNAME',
+                    passwordVariable: 'DOCKER_PASSWORD'
+                )]) {
+                    script {
                         if (isUnix()) {
-                            sh loginCmd
+                            sh "echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin"
                         } else {
-                            bat """echo %DOCKER_PASSWORD% | docker login -u %DOCKER_USERNAME% --password-stdin"""
+                            bat "echo %DOCKER_PASSWORD% | docker login -u %DOCKER_USERNAME% --password-stdin"
                         }
                     }
                 }
@@ -60,14 +109,36 @@ pipeline {
         stage('Push Docker Image') {
             steps {
                 script {
-                    def pushCmd = "docker push ${IMAGE_NAME}:${IMAGE_TAG}"
+                    def versionTag = "${IMAGE_NAME}:${DOCKER_VERSION}"
                     if (isUnix()) {
-                        sh pushCmd
+                        sh "docker push ${versionTag}"
                     } else {
-                        bat pushCmd
+                        bat "docker push ${versionTag}"
                     }
                 }
             }
+        }
+
+        stage('Deploy to Production (Optional)') {
+            when {
+                expression { params.PROFILE == 'prod' }
+            }
+            steps {
+                echo "Deploying inventory_service in production mode with tag: ${DOCKER_VERSION}"
+                // Add SSH or docker-compose deployment logic here
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs()
+        }
+        success {
+            echo "✅ inventory_service build and deployment successful with Docker tag: ${DOCKER_VERSION}"
+        }
+        failure {
+            echo "❌ inventory_service build or deployment failed!"
         }
     }
 }

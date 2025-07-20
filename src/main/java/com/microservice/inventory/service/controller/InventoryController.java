@@ -1,5 +1,7 @@
 package com.microservice.inventory.service.controller;
 
+import java.util.List;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
@@ -42,12 +44,16 @@ public class InventoryController {
 		return ResponseEntity.ok(ApiResponse.success(response, "Stock checked successfully"));
 	}
 
-	@PostMapping
-	@Operation(summary = "Add stock")
-	public ResponseEntity<ApiResponse<InventoryResponse>> addStock(@Valid @RequestBody InventoryRequest request) {
-		log.info("Adding inventory: {}", request);
-		InventoryResponse response = inventoryService.addInventory(request);
-		return ResponseEntity.ok(ApiResponse.success(response, "Inventory added successfully"));
+	@PostMapping("/batch")
+	@Operation(summary = "Add inventory in batch")
+	public ResponseEntity<ApiResponse<List<InventoryResponse>>> addStockBatch(
+			@Valid @RequestBody List<InventoryRequest> requests) {
+
+		log.info("Received batch inventory request. Size: {}", requests.size());
+
+		List<InventoryResponse> responses = inventoryService.addInventoryBatch(requests);
+
+		return ResponseEntity.ok(ApiResponse.success(responses, "Batch inventory update successful"));
 	}
 
 	@PutMapping("/reduce")
