@@ -14,6 +14,7 @@ public interface InventoryService {
     InventoryResponse addInventory(InventoryRequest request);
     List<InventoryResponse> addInventoryBatch(List<InventoryRequest> requests);
     Page<InventoryResponse> getAllInventories(Pageable pageable);
+    List<InventoryResponse> checkProductInStockByQuantity(List<InventoryRequest> requests);
 
 }
 

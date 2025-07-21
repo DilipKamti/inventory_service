@@ -72,4 +72,13 @@ public class InventoryController {
 		Page<InventoryResponse> inventoryPage = inventoryService.getAllInventories(PageRequest.of(page, size));
 		return ResponseEntity.ok(ApiResponse.success(inventoryPage, "Inventories fetched"));
 	}
+
+	@PostMapping("/batch/check")
+	@Operation(summary = "Check stock availability for multiple products")
+	public ResponseEntity<ApiResponse<List<InventoryResponse>>> checkProductInStock(@RequestBody List<InventoryRequest> productList) {
+		log.info("Checking stock for product(s): {}", productList);
+		List<InventoryResponse> response = inventoryService.checkProductInStockByQuantity(productList);
+		return ResponseEntity.ok(ApiResponse.success(response, "Stock checked successfully"));
+	}
+
 }

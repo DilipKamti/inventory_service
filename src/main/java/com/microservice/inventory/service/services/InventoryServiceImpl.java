@@ -26,6 +26,13 @@ public class InventoryServiceImpl implements InventoryService {
 
 	private final InventoryRepository inventoryRepository;
 
+	
+	@Override
+	public InventoryResponse addInventory(InventoryRequest request) {
+		// TODO Auto-generated method stub
+		throw new UnsupportedOperationException("Unimplemented method 'addInventory'");
+	}
+
 	@Override
 	@Cacheable(value = "stock", key = "#productCode")
 	public InventoryResponse checkStock(String productCode) {
@@ -116,9 +123,27 @@ public class InventoryServiceImpl implements InventoryService {
 				});
 	}
 
-	@Override
-	public InventoryResponse addInventory(InventoryRequest request) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("Unimplemented method 'addInventory'");
-	}
+@Override
+public List<InventoryResponse> checkProductInStockByQuantity(List<InventoryRequest> requests) {
+    List<String> productCodes = requests.stream()
+        .map(InventoryRequest::productCode)
+        .toList();
+
+    List<Inventory> inventoryList = inventoryRepository.findAllByProductCodeIn(productCodes);
+
+	return inventoryList.stream()
+		.map(product -> {
+			InventoryRequest matchedRequest = requests.stream()
+				.filter(r -> r.productCode().equals(product.getProductCode()))
+				.findFirst()
+				.orElse(null);
+
+			boolean inStock = matchedRequest != null && product.getQuantity() >= matchedRequest.quantity();
+
+			return new InventoryResponse(product.getProductCode(), inStock, product.getQuantity());
+		})
+		.toList();
+}
+
+
 }
