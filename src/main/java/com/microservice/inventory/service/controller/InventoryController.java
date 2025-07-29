@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -37,6 +38,7 @@ public class InventoryController {
 	private final InventoryService inventoryService;
 
 	@GetMapping("/{productCode}")
+	@PreAuthorize("hasRole('ADMIN')")
 	@Operation(summary = "Check stock availability")
 	public ResponseEntity<ApiResponse<InventoryResponse>> checkStock(@PathVariable String productCode) {
 		log.info("Checking stock for product: {}", productCode);
@@ -45,6 +47,7 @@ public class InventoryController {
 	}
 
 	@PostMapping("/batch")
+	@PreAuthorize("hasRole('ADMIN')")
 	@Operation(summary = "Add inventory in batch")
 	public ResponseEntity<ApiResponse<List<InventoryResponse>>> addStockBatch(
 			@Valid @RequestBody List<InventoryRequest> requests) {
@@ -57,6 +60,7 @@ public class InventoryController {
 	}
 
 	@PutMapping("/reduce")
+	@PreAuthorize("hasAnyRole('ADMIN', 'USER')")
 	@Operation(summary = "Reduce stock")
 	public ResponseEntity<ApiResponse<Void>> reduceStock(@Valid @RequestBody InventoryRequest request) {
 		log.info("Reducing inventory for: {}", request);
@@ -65,6 +69,7 @@ public class InventoryController {
 	}
 
 	@GetMapping
+	@PreAuthorize("hasAnyRole('ADMIN', 'USER')")
 	@Operation(summary = "Get all inventory items with pagination")
 	public ResponseEntity<ApiResponse<Page<InventoryResponse>>> getAllInventories(
 			@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "10") int size) {
@@ -74,6 +79,7 @@ public class InventoryController {
 	}
 
 	@PostMapping("/batch/check")
+	@PreAuthorize("hasAnyRole('ADMIN', 'USER')")
 	@Operation(summary = "Check stock availability for multiple products")
 	public ResponseEntity<ApiResponse<List<InventoryResponse>>> checkProductInStock(@RequestBody List<InventoryRequest> productList) {
 		log.info("Checking stock for product(s): {}", productList);
